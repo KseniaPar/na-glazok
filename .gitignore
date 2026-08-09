@@ -4,10 +4,12 @@ telegram-local.txt
 *.db
 data/
 audit.jsonl
+progress.txt
 __pycache__/
 *.pyc
 .venv/
 venv/
+*.egg-info/
 .idea/
 .vscode/
 *.log

@@ -1,11 +1,12 @@
-"""Local config helpers for the standalone «На Глазок» project."""
+"""Local config helpers for «На Глазок»."""
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PACKAGE_DIR.parent
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -31,8 +32,15 @@ def load_openrouter_api_key() -> str:
         if env:
             return env
 
-    # Optional convenience: sibling Knowbase / ai-lab checkout
-    sibling = PROJECT_ROOT.parent / "ai-lab" / "backend" / "src" / "main" / "resources" / "application-local.yml"
+    sibling = (
+        PROJECT_ROOT.parent
+        / "ai-lab"
+        / "backend"
+        / "src"
+        / "main"
+        / "resources"
+        / "application-local.yml"
+    )
     if sibling.is_file():
         text = sibling.read_text(encoding="utf-8")
         m = re.search(r"api-key:\s*(\S+)", text)

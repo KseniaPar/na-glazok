@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-DIR = Path(__file__).resolve().parent
-DB_PATH = DIR / "data" / "calories.db"
-# Europe/Moscow без пакета tzdata (Windows)
+from na_glazok.config import PROJECT_ROOT
+
+DB_PATH = PROJECT_ROOT / "data" / "calories.db"
 LOCAL_TZ = timezone(timedelta(hours=3), name="UTC+3")
 HISTORY_DAYS = 7
 
@@ -17,7 +17,7 @@ HISTORY_DAYS = 7
 class StoredMessage:
     role: str
     content: str
-    created_at: datetime  # aware, Europe/Moscow
+    created_at: datetime
 
 
 def _connect() -> sqlite3.Connection:
@@ -53,7 +53,9 @@ def format_stamp(dt: datetime) -> str:
     return to_local(dt).strftime("%Y-%m-%d %H:%M")
 
 
-def add_message(chat_id: int, role: str, content: str, created_at: datetime | None = None) -> None:
+def add_message(
+    chat_id: int, role: str, content: str, created_at: datetime | None = None
+) -> None:
     ts = to_local(created_at).isoformat()
     with _connect() as conn:
         conn.execute(
@@ -90,7 +92,6 @@ def load_history(chat_id: int, *, days: int = HISTORY_DAYS) -> list[StoredMessag
 
 
 def for_llm(history: list[StoredMessage]) -> list[dict[str, str]]:
-    """Prefix each turn with local timestamp for the model."""
     messages: list[dict[str, str]] = []
     for m in history:
         stamp = format_stamp(m.created_at)

@@ -1,20 +1,18 @@
-"""Telegram-бот «На Глазок» — КБЖУ по ленивому описанию."""
+"""Telegram bot — thin wrapper around execution loop."""
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
 import sys
-from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
-from calorie_core import WELCOME
-from execution_loop import run_execution_loop
-from memory import (
+from na_glazok.config import load_dotenv
+from na_glazok.memory import (
     add_message,
     clear_chat,
     for_llm,
@@ -22,32 +20,20 @@ from memory import (
     load_history,
     to_local,
 )
+from na_glazok.pipeline.loop import run_execution_loop
+from na_glazok.prompts.generator import WELCOME
 
-DIR = Path(__file__).resolve().parent
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("calorie-bot")
 
-CHAT_MODE: dict[int, str] = {}
-
 
 def load_token() -> str:
-    env = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
-    if env:
-        return env
-    for name in ("telegram-local.txt", ".env"):
-        path = DIR / name
-        if not path.is_file():
-            continue
-        text = path.read_text(encoding="utf-8").strip()
-        if name == ".env":
-            for line in text.splitlines():
-                line = line.strip()
-                if line.startswith("TELEGRAM_BOT_TOKEN="):
-                    return line.split("=", 1)[1].strip().strip("'\"")
-        elif text and not text.startswith("#"):
-            return text.splitlines()[0].strip().lstrip("\ufeff")
+    load_dotenv()
+    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if token:
+        return token
     raise RuntimeError(
-        "Нет TELEGRAM_BOT_TOKEN. Задай env или na-glazok/telegram-local.txt"
+        "Нет TELEGRAM_BOT_TOKEN. Добавь его в .env (см. .env.example)."
     )
 
 
@@ -74,19 +60,8 @@ async def cmd_reset(message: Message) -> None:
 
 async def cmd_help(message: Message) -> None:
     await message.answer(
-        WELCOME
-        + "\n\nКоманды:\n/reset — очистить память (до 7 дней в SQLite)\n"
-        "/mode baseline|hardened — промпт"
+        WELCOME + "\n\nКоманды:\n/reset — очистить память\n/help"
     )
-
-
-async def cmd_mode(message: Message) -> None:
-    parts = (message.text or "").split()
-    if len(parts) >= 2 and parts[1].lower() in ("baseline", "hardened"):
-        CHAT_MODE[message.chat.id] = parts[1].lower()
-        await message.answer(f"Режим промпта: {CHAT_MODE[message.chat.id]}")
-        return
-    await message.answer("Использование: /mode baseline  или  /mode hardened")
 
 
 async def safe_edit(status: Message, text: str, *, html: bool = False) -> None:
@@ -109,7 +84,6 @@ async def on_food(message: Message, bot: Bot) -> None:
         return
 
     chat_id = message.chat.id
-    mode = CHAT_MODE.get(chat_id, "hardened")
     msg_time = to_local(message.date)
     stamp = format_stamp(msg_time)
     prior = for_llm(load_history(chat_id))
@@ -121,7 +95,6 @@ async def on_food(message: Message, bot: Bot) -> None:
         loop_res = await asyncio.to_thread(
             run_execution_loop,
             text,
-            mode=mode,
             history=prior,
             message_stamp=stamp,
             user_id=str(chat_id),
@@ -137,8 +110,8 @@ async def on_food(message: Message, bot: Bot) -> None:
             user_msg = "Слишком много запросов. Подожди минуту и попробуй снова."
         else:
             user_msg = (
-                "Не смог посчитать (шлюз/сеть). Убедись, что запущен "
-                "`python na-glazok/gateway.py`.\n"
+                "Не смог посчитать (сеть/ключ). Проверь OPENROUTER_API_KEY "
+                "и что бот запущен: `python -m na_glazok`.\n"
                 f"Детали: {type(exc).__name__}"
             )
         await safe_edit(status, user_msg, html=False)
@@ -151,7 +124,6 @@ async def main() -> None:
     dp.message.register(cmd_start, CommandStart())
     dp.message.register(cmd_help, Command("help"))
     dp.message.register(cmd_reset, Command("reset"))
-    dp.message.register(cmd_mode, Command("mode"))
     dp.message.register(on_food, F.text)
 
     me = None
@@ -165,17 +137,17 @@ async def main() -> None:
     if me is None:
         raise RuntimeError("Не удалось подключиться к api.telegram.org")
 
-    log.info(
-        "Bot @%s started via gateway %s (execution loop + security step)",
-        me.username,
-        os.environ.get("LLM_GATEWAY_URL") or "http://127.0.0.1:8000/v1",
-    )
+    log.info("Bot @%s started (in-process gateway + execution loop)", me.username)
     await dp.start_polling(bot)
 
 
-if __name__ == "__main__":
+def run() -> None:
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         log.info("Stopped")
         sys.exit(0)
+
+
+if __name__ == "__main__":
+    run()
