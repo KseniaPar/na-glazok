@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>На Глазок — вход</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="login-panel">
+      <h1 class="brand">На Глазок</h1>
+      <p class="tagline">Примерный КБЖУ по ленивому описанию еды. Войди, чтобы открыть чат.</p>
+      <form class="login-form" id="login-form">
+        <label>
+          Логин
+          <input type="text" name="username" autocomplete="username" required />
+        </label>
+        <label>
+          Пароль
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <p class="error" id="error" aria-live="polite"></p>
+        <button class="btn btn-primary" type="submit" id="submit">Войти</button>
+      </form>
+    </section>
+  </main>
+  <script>
+    const form = document.getElementById("login-form");
+    const errorEl = document.getElementById("error");
+    const submit = document.getElementById("submit");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      submit.disabled = true;
+      const data = new FormData(form);
+      try {
+        const res = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: data.get("username"),
+            password: data.get("password"),
+          }),
+        });
+        if (!res.ok) {
+          errorEl.textContent = "Неверный логин или пароль";
+          return;
+        }
+        location.href = "/";
+      } catch (_) {
+        errorEl.textContent = "Сеть недоступна. Попробуй ещё раз.";
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>На Глазок</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=2" />
+</head>
+<body>
+  <main class="shell">
+    <header class="chat-header">
+      <div>
+        <h1 class="brand">На Глазок</h1>
+        <p class="tagline">Опиши, что съел — посчитаю КБЖУ на глаз.</p>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="btn btn-ghost" id="reset">Сброс</button>
+        <button type="button" class="btn btn-ghost" id="logout">Выйти</button>
+      </div>
+    </header>
+
+    <div class="messages" id="messages" aria-live="polite"></div>
+
+    <form class="composer" id="composer">
+      <textarea id="text" rows="2" placeholder="Например: три блина со сгущёнкой и капучино" required></textarea>
+      <button class="btn btn-primary" type="submit" id="send">Считать</button>
+    </form>
+  </main>
+  <script>
+    const messages = document.getElementById("messages");
+    const composer = document.getElementById("composer");
+    const textEl = document.getElementById("text");
+    const sendBtn = document.getElementById("send");
+
+    function addMsg(role, text, blocked) {
+      const el = document.createElement("div");
+      el.className = "msg " + role + (blocked ? " blocked" : "");
+      el.textContent = text;
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+      return el;
+    }
+
+    function showTyping() {
+      const el = document.createElement("div");
+      el.className = "msg bot typing";
+      el.setAttribute("aria-busy", "true");
+      el.innerHTML =
+        '<div class="typing-row">' +
+        '<span class="typing-label">Печатает</span>' +
+        '<span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span>' +
+        "</div>" +
+        '<p class="typing-note">Извини за ожидание — считаю чуть дольше обычного.</p>';
+      messages.appendChild(el);
+      messages.scrollTop = messages.scrollHeight;
+
+      const note = el.querySelector(".typing-note");
+      const label = el.querySelector(".typing-label");
+      const timers = [
+        setTimeout(() => {
+          label.textContent = "Считаю КБЖУ";
+        }, 2500),
+        setTimeout(() => {
+          note.classList.add("show");
+          messages.scrollTop = messages.scrollHeight;
+        }, 5000),
+      ];
+      el._timers = timers;
+      return el;
+    }
+
+    function hideTyping(el) {
+      if (!el) return;
+      (el._timers || []).forEach(clearTimeout);
+      el.remove();
+    }
+
+    async function ensureAuth() {
+      const res = await fetch("/api/welcome");
+      if (res.status === 401) {
+        location.href = "/login";
+        return false;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (messages.childElementCount === 0) {
+          addMsg("bot", data.welcome || "Привет! Напиши, что съел.");
+        }
+      }
+      return true;
+    }
+
+    composer.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = textEl.value.trim();
+      if (!text) return;
+      addMsg("user", text);
+      textEl.value = "";
+      sendBtn.disabled = true;
+      const typing = showTyping();
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        hideTyping(typing);
+        if (res.status === 401) {
+          location.href = "/login";
+          return;
+        }
+        const data = await res.json();
+        addMsg("bot", data.reply || "Пустой ответ", !!data.blocked);
+      } catch (_) {
+        hideTyping(typing);
+        addMsg("bot", "Сеть недоступна. Попробуй ещё раз.");
+      } finally {
+        sendBtn.disabled = false;
+        textEl.focus();
+      }
+    });
+
+    textEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        composer.requestSubmit();
+      }
+    });
+
+    document.getElementById("reset").addEventListener("click", async () => {
+      const res = await fetch("/api/reset", { method: "POST" });
+      if (res.status === 401) {
+        location.href = "/login";
+        return;
+      }
+      messages.innerHTML = "";
+      addMsg("bot", "Память очищена. Пиши еду — считаю с нуля.");
+    });
+
+    document.getElementById("logout").addEventListener("click", async () => {
+      await fetch("/api/logout", { method: "POST" });
+      location.href = "/login";
+    });
+
+    ensureAuth();
+  </script>
+</body>
+</html>

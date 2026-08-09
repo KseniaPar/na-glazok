@@ -13,7 +13,14 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 apt-get update -y
-apt-get install -y python3 python3-venv python3-pip git
+apt-get install -y software-properties-common git
+# Ubuntu 22.04 ships 3.10; package needs >=3.11
+if ! python3.11 --version &>/dev/null; then
+  add-apt-repository -y ppa:deadsnakes/ppa
+  apt-get update -y
+  apt-get install -y python3.11 python3.11-venv python3.11-dev
+fi
+PYTHON_BIN=python3.11
 
 id -u "$APP_USER" &>/dev/null || useradd --system --create-home --shell /usr/sbin/nologin "$APP_USER"
 
@@ -27,7 +34,8 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 sudo -u "$APP_USER" bash -lc "
   cd '$APP_DIR'
-  python3 -m venv .venv
+  rm -rf .venv
+  '$PYTHON_BIN' -m venv .venv
   .venv/bin/pip install -U pip
   .venv/bin/pip install -e .
 "
@@ -37,12 +45,18 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
   chown "$APP_USER:$APP_USER" "$APP_DIR/.env"
   chmod 600 "$APP_DIR/.env"
   echo
-  echo ">>> Создан $APP_DIR/.env — впиши OPENROUTER_API_KEY и TELEGRAM_BOT_TOKEN"
+  echo ">>> Создан $APP_DIR/.env — впиши OPENROUTER_API_KEY, WEB_USERNAME, WEB_PASSWORD"
   echo ">>> nano $APP_DIR/.env"
   echo
 fi
 
 install -m 644 "$APP_DIR/deploy/na-glazok.service" /etc/systemd/system/na-glazok.service
+install -m 644 "$APP_DIR/deploy/nginx-na-glazok.conf" /etc/nginx/sites-available/na-glazok
+ln -sfn /etc/nginx/sites-available/na-glazok /etc/nginx/sites-enabled/na-glazok
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl enable nginx
+systemctl restart nginx
 systemctl daemon-reload
 systemctl enable na-glazok.service
 
@@ -50,3 +64,4 @@ echo
 echo "Готово. После заполнения .env:"
 echo "  systemctl start na-glazok"
 echo "  journalctl -u na-glazok -f"
+echo "  Открой http://<IP>/  (логин/пароль из WEB_USERNAME / WEB_PASSWORD)"

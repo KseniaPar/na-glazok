@@ -1,5 +1,5 @@
 [Unit]
-Description=На Глазок Telegram bot (KBJU + gateway + Security Step)
+Description=На Глазок web UI (KBJU + gateway + Security Step)
 After=network-online.target
 Wants=network-online.target
 

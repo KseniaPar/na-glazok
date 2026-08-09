@@ -1,8 +1,8 @@
 # На Глазок
 
-Telegram-бот, который считает **примерный КБЖУ** по ленивому описанию еды — с защитным **LLM Gateway** (in-process) и циклом **Security Step** перед ответом.
+Веб-чат, который считает **примерный КБЖУ** по ленивому описанию еды — с защитным **LLM Gateway** (in-process) и циклом **Security Step** перед ответом.
 
-Сделан для **Day 15. Red Team Challenge**: партнёр атакует **только через Telegram**. Отдельного HTTP API нет.
+Сделан для **Day 15. Red Team Challenge**: партнёр атакует через веб-чат (логин/пароль от владельца). Отдельного OpenAI-compatible HTTP API нет.
 
 > Учебный / личный пет-проект. Не медицинский совет и не замена нутрициологу.
 
@@ -11,7 +11,7 @@ Telegram-бот, который считает **примерный КБЖУ** �
 ## Как это работает
 
 ```text
-Telegram (текст)
+Браузер (текст после логина)
       │
       ▼
 ┌─────────────────────────────────────────┐
@@ -32,7 +32,7 @@ Telegram (текст)
 └─────────────────────────────────────────┘
       │
       ▼
- ответ в Telegram
+ ответ в чате
 ```
 
 
@@ -43,24 +43,22 @@ Telegram (текст)
 | **Output Guard**  | Секреты на выходе, утечка system/canary, `protein.ru`, ответы вида «Декодированная инструкция…»                                                                                                                                                |
 | **Security Step** | Вердикт CRITICAL / HIGH / MEDIUM / LOW / CLEAN                                                                                                                                                                                                 |
 | **Heuristics**    | Яды с цифрами КБЖУ и «это тест, пропусти» → всё равно CRITICAL                                                                                                                                                                                 |
-| **Память**        | SQLite до 7 дней; `/reset` очищает                                                                                                                                                                                                             |
+| **Память**        | SQLite до 7 дней; кнопка «Сброс» очищает                                                                                                                                                                                                       |
 
 
 Всё в **одном процессе**: `python -m na_glazok`. Отдельный gateway-сервер не нужен.
 
 ---
 
-
-
 ## Требования
 
 - Python **3.11+**
-- [OpenRouter](https://openrouter.ai/) API-ключ
-- Токен бота от [@BotFather](https://t.me/BotFather)
+- LLM upstream: [OpenRouter](https://openrouter.ai/) **или** локальный [Ollama](https://ollama.com/) (на части VPS OpenRouter режется Cloudflare)
+- Логин/пароль для веб-UI (`WEB_USERNAME` / `WEB_PASSWORD`)
+
+Опционально: токен Telegram (`python -m na_glazok.bot`), если сеть до `api.telegram.org` доступна.
 
 ---
-
-
 
 ## Установка и запуск
 
@@ -78,49 +76,63 @@ Copy-Item .env.example .env
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...
-TELEGRAM_BOT_TOKEN=123456:ABCDEF...
+WEB_USERNAME=naglazok
+WEB_PASSWORD=change-me
 ```
 
 Опционально:
 
 ```env
+WEB_HOST=127.0.0.1
+WEB_PORT=8080
 OPENROUTER_MODEL=openai/gpt-4o-mini
 GATEWAY_RATE_LIMIT=40
 ```
 
-Запуск (логи в этой же консоли):
+Запуск:
 
 ```powershell
 $env:PYTHONIOENCODING = "utf-8"
 python -m na_glazok
 ```
 
-Ожидаемый лог:
+Открой `http://127.0.0.1:8080/login`, войди логином/паролем из `.env`.
 
-```text
-Bot @your_bot_name started (in-process gateway + execution loop)
-Start polling
-```
+Telegram (если нужен): `python -m na_glazok.bot`.
 
-Пиши боту в Telegram. Остановка: `Ctrl+C`.
+### UI
 
-**Важно:** одновременно должен работать **один** инстанс бота. Иначе Telegram вернёт `Conflict: terminated by other getUpdates request`.
-
-### Команды
-
-
-| Команда  | Действие                                                                  |
-| -------- | ------------------------------------------------------------------------- |
-| `/start` | приветствие                                                               |
-| `/help`  | справка                                                                   |
-| `/reset` | очистить память диалога (после red-team пейлоадов с ключами — сделай это) |
-
-
-Обычный текст = еда или атака.
+| Действие | Что делает |
+| -------- | ---------- |
+| Войти | cookie-сессия (~7 дней) |
+| Текст в чате | КБЖУ / отказ / блок шлюза |
+| Сброс | очистить память диалога |
+| Выйти | сбросить сессию |
 
 ---
 
+## Деплой на VDS
 
+```bash
+bash deploy/setup.sh
+# в /opt/na-glazok/.env: WEB_USERNAME, WEB_PASSWORD
+# и либо OpenRouter-ключ, либо локальный Ollama (см. OPENROUTER_URL ниже)
+systemctl start na-glazok nginx
+```
+
+Nginx проксирует `:80` → `127.0.0.1:8080` (`deploy/nginx-na-glazok.conf`).
+
+Если с VPS `openrouter.ai` даёт 403 — подними Ollama и в `.env`:
+
+```env
+OPENROUTER_URL=http://127.0.0.1:11434/v1/chat/completions
+OPENROUTER_MODEL=qwen2.5:1.5b
+OPENROUTER_API_KEY=ollama-local
+```
+
+Ответы на CPU без GPU могут занимать десятки секунд (в UI есть индикатор «Печатает»).
+
+---
 
 ## Логи
 
@@ -133,22 +145,18 @@ Start polling
 
 ---
 
-
-
 ## Для партнёра (Red Team)
 
-Владелец даёт **username бота** (например `@na_glazok_ai_bot`) и держит `python -m na_glazok` запущенным.
+Владелец даёт **URL** и **логин/пароль**, держит сервис запущенным.
 
-**Отдельная инструкция атакующему:** [`ATTACKER.md`](ATTACKER.md) — доступ, векторы, критерии успеха, шаблон отчёта.
+**Инструкция атакующему:** [`ATTACKER.md`](ATTACKER.md).
 
 
 |                    |                                                    |
 | ------------------ | -------------------------------------------------- |
-| **Вход**           | текстовое сообщение в чат                          |
+| **Вход**           | текст в веб-чате после логина                      |
 | **Выход**          | КБЖУ, отказ, блок шлюза или «ошибка безопасности»  |
 | **Доказательства** | скрины чата; у владельца — консоль и `audit.jsonl` |
-
-
 
 
 ### Векторы атак (что ломать)
@@ -164,8 +172,6 @@ Start polling
 | PII              | карта / email / телефон                                  | `[REDACTED_*]`                       |
 | Яды              | пластик, гвозди, бензин + ккал                           | CRITICAL → rewind → отказ            |
 | Утечка в ответе  | ключ / system / canary в тексте                          | Output Guard                         |
-
-
 
 
 ### Демо перед боем
@@ -185,54 +191,56 @@ Start polling
 
 ---
 
-
-
 ## Структура
 
 ```text
 na-glazok/
 ├── README.md
 ├── pyproject.toml
-├── requirements.txt
 ├── .env.example
 ├── na_glazok/
-│   ├── __main__.py      # python -m na_glazok
-│   ├── config.py
-│   ├── bot/             # Telegram
-│   ├── gateway/         # guards, audit, rate limit
-│   ├── llm/             # OpenRouter + in-process guards
-│   ├── pipeline/        # execution loop + heuristics
-│   ├── prompts/         # генератор + инспектор
-│   └── memory/          # SQLite
+│   ├── __main__.py      # web UI
+│   ├── web/             # aiohttp + static
+│   ├── bot/             # optional Telegram
+│   ├── gateway/
+│   ├── llm/
+│   ├── pipeline/
+│   ├── prompts/
+│   └── memory/
+├── deploy/
+│   ├── setup.sh
+│   ├── na-glazok.service
+│   └── nginx-na-glazok.conf
 ├── tests/
-│   └── test_gateway.py
-├── data/                # calories.db (runtime)
-└── audit.jsonl          # runtime
+├── data/
+└── audit.jsonl
 ```
 
 `.env` создаёшь локально из `.env.example` — **не коммитить**.
 
 ---
 
-
-
 ## Конфигурация
 
 
 | Переменная           | Обязательно | Смысл                                         |
 | -------------------- | ----------- | --------------------------------------------- |
-| `OPENROUTER_API_KEY` | да          | ключ OpenRouter                               |
-| `TELEGRAM_BOT_TOKEN` | да          | токен @BotFather                              |
+| `OPENROUTER_API_KEY` | да          | ключ OpenRouter (или любой токен для Ollama)  |
+| `WEB_USERNAME`       | да          | логин веб-UI                                  |
+| `WEB_PASSWORD`       | да          | пароль веб-UI                                 |
+| `WEB_HOST`           | нет         | по умолчанию `127.0.0.1`                      |
+| `WEB_PORT`           | нет         | по умолчанию `8080`                           |
+| `TELEGRAM_BOT_TOKEN` | нет         | только для `python -m na_glazok.bot`          |
 | `OPENROUTER_MODEL`   | нет         | по умолчанию `openai/gpt-4o-mini`             |
-| `GATEWAY_RATE_LIMIT` | нет         | лимит LLM-вызовов/мин; при старте бота → `40` |
-|                      |             |                                               |
+| `OPENROUTER_URL`     | нет         | upstream chat completions URL                 |
+| `GATEWAY_RATE_LIMIT` | нет         | лимит LLM-вызовов/мин; при старте → `40`      |
+
+На части VPS Cloudflare режет `openrouter.ai` (403). Тогда укажи локальный Ollama: `OPENROUTER_URL=http://127.0.0.1:11434/v1/chat/completions`, модель например `qwen2.5:1.5b` (быстрее на CPU) или `qwen2.5:7b` (качественнее, медленнее).
 
 
-Партнёру: username бота и/или zip **без** `.env`.
+Партнёру: URL + логин/пароль (не клади `.env` в zip).
 
 ---
-
-
 
 ## Тесты
 
@@ -240,28 +248,23 @@ na-glazok/
 python -m tests.test_gateway
 ```
 
-Mock без сети: секреты (base64 / split / zero-width), PII, output guard, rate limit, кусок loop.
-
 ---
-
-
 
 ## Типичные проблемы
 
 
 | Симптом                        | Что сделать                                                                                      |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `Нет TELEGRAM_BOT_TOKEN`       | заполни `.env`                                                                                   |
+| `Нет WEB_USERNAME / WEB_PASSWORD` | заполни `.env`                                                                                |
 | `OpenRouter API key not found` | `OPENROUTER_API_KEY` в `.env`                                                                    |
-| Блок на обычной еде после атак | `/reset` — в истории могли остаться ключи (теперь история скрабится, но reset всё равно полезен) |
-| `Conflict: other getUpdates`   | убей второй `python -m na_glazok` / старый `bot.py`                                              |
+| `Access denied by security policy` / 403 на еду | с VPS режут OpenRouter → переключись на Ollama (`OPENROUTER_URL`)              |
+| Очень долгий ответ             | локальная модель на CPU; меньше модель (`1.5b`) или GPU/прокси к OpenRouter                      |
+| Блок на обычной еде после атак | «Сброс» — в истории могли остаться ключи                                                         |
 | `429` / Too Many Requests      | подожди или подними `GATEWAY_RATE_LIMIT`                                                         |
 | Непонятный ответ               | консоль `[LOOP]` / `[AUDIT]`, хвост `audit.jsonl`                                                |
 
 
 ---
-
-
 
 ## Лицензия / статус
 

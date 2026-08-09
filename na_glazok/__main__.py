@@ -1,4 +1,4 @@
-"""python -m na_glazok → Telegram-бот."""
+"""python -m na_glazok → web UI (login + chat)."""
 from __future__ import annotations
 
 import os
@@ -6,7 +6,7 @@ import os
 
 def main() -> None:
     os.environ.setdefault("GATEWAY_RATE_LIMIT", "40")
-    from na_glazok.bot.main import run
+    from na_glazok.web.app import run
 
     run()
 
