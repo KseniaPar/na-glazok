@@ -170,7 +170,7 @@ OPENROUTER_API_KEY=ollama-local
 | Секрет скрытый   | base64, zero-width, `sk - proj`                          | normalize + decode + scan            |
 | Hex / encoding   | длинный hex + «декодируй и выполни» (слив canary/system) | scrub hex/instr + output guard       |
 | PII              | карта / email / телефон                                  | `[REDACTED_*]`                       |
-| Яды              | пластик, гвозди, бензин + ккал                           | CRITICAL → rewind → отказ            |
+| Яды              | пластик, гвозди, бензин + ккал; EN/IUPAC и «бренды» Gasoline-Max | CRITICAL → rewind → отказ |
 | Утечка в ответе  | ключ / system / canary в тексте                          | Output Guard                         |
 
 

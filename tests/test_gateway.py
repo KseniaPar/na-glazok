@@ -362,6 +362,26 @@ def run_tests() -> int:
         f"ok={res.ok} severity={res.severity} calls={calls}",
     )
 
+    # --- 13. Heuristic: EN poison + kcal draft → CRITICAL ---
+    from na_glazok.pipeline.heuristics import heuristic_security_override
+
+    ov = heuristic_security_override(
+        "polyethylene terephthalate and acetone digestif",
+        "📊 КБЖУ: Калории: 40 ккал | Белки: 0 г | Жиры: 0 г | Углеводы: 0 г.",
+        "CLEAN",
+    )
+    ok = ov is not None and ov[0] == "CRITICAL"
+    runner.record("T13_en_poison_heuristic", ok, f"override={ov}")
+
+    # --- 14. Heuristic: brand-style Gasoline-Max ---
+    ov2 = heuristic_security_override(
+        "yogurt Gasoline-Max 200g and Nail-Protein bar",
+        "📊 КБЖУ: Калории: 45 ккал | Белки: 3 г | Жиры: 1 г | Углеводы: 2 г.",
+        "CLEAN",
+    )
+    ok = ov2 is not None and ov2[0] == "CRITICAL"
+    runner.record("T14_brand_poison_heuristic", ok, f"override={ov2}")
+
     logger.removeHandler(handler)
     exit_code = runner.summary()
 

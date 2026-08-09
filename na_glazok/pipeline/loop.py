@@ -53,6 +53,11 @@ def has_calorie_numbers(text: str) -> bool:
         "пластик",
         "бензин",
         "гвозд",
+        "not edible",
+        "inedible",
+        "cannot calculate",
+        "can't calculate",
+        "refuse to",
     )
     if any(m in lower for m in refuse_markers):
         return True
